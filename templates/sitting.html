@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SpeakSmart – Sitting Mode</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+body{
+  margin:0;
+  font-family:Segoe UI, Arial;
+  background:linear-gradient(135deg,#ede9fe,#f5f3ff);
+}
+.container{
+  max-width:1200px;
+  margin:30px auto;
+  display:grid;
+  grid-template-columns:2fr 1fr;
+  gap:20px;
+}
+.card{
+  background:white;
+  padding:20px;
+  border-radius:18px;
+  box-shadow:0 20px 40px rgba(0,0,0,.1);
+}
+h2{color:#6d28d9;margin-top:0}
+video{
+  width:100%;
+  border-radius:14px;
+  background:black;
+}
+button{
+  padding:10px 22px;
+  border:none;
+  border-radius:12px;
+  background:#7c3aed;
+  color:white;
+  cursor:pointer;
+}
+button:disabled{opacity:.6}
+.good{color:#16a34a}
+.warn{color:#ca8a04}
+.bad{color:#dc2626}
+.tip{margin-top:14px;font-weight:600}
+#overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(245,243,255,.95);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  z-index:999;
+}
+.spinner{
+  width:50px;height:50px;
+  border:5px solid #ddd;
+  border-top:5px solid #7c3aed;
+  border-radius:50%;
+  animation:spin 1s linear infinite;
+  margin-bottom:15px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+
+<body>
+
+<div id="overlay">
+  <div class="spinner"></div>
+  Generating your report…
+</div>
+
+<div class="container">
+
+<div class="card">
+  <h2>🎥 Sitting Mode</h2>
+  <video id="cam" autoplay muted playsinline></video><br><br>
+  <button id="start">Start Talk</button>
+  <button id="stop" disabled>End Talk</button>
+</div>
+
+<div class="card">
+  <h2>Live Coach</h2>
+  💪 Confidence: <span id="confidence" class="good">High</span><br><br>
+  👀 Eye Contact: <span id="eye" class="good">Good</span><br><br>
+  <div class="tip">
+    Coach Tip: <span id="coachTip" class="good">Start speaking 👍</span>
+  </div>
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+
+<script>
+/* ================= CAMERA ================= */
+const cam = document.getElementById("cam");
+let mediaStream;
+
+navigator.mediaDevices.getUserMedia({video:true,audio:true})
+  .then(s => {
+    mediaStream = s;
+    cam.srcObject = s;
+  });
+
+/* ================= SPEECH ================= */
+const SpeechRecognition =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
+const recognition = new SpeechRecognition();
+recognition.lang = "en-US";
+recognition.continuous = true;
+recognition.interimResults = true;
+
+let speechText = "";
+
+recognition.onresult = e => {
+  let t = "";
+  for(let i=0;i<e.results.length;i++){
+    t += e.results[i][0].transcript + " ";
+  }
+  speechText = t.trim();
+};
+
+/* ================= AUDIO ================= */
+let mediaRecorder;
+let audioChunks = [];
+
+function startAudioRecording(){
+  audioChunks = [];
+  mediaRecorder = new MediaRecorder(mediaStream);
+  mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+  mediaRecorder.start();
+}
+
+function stopAudioRecording(){
+  return new Promise(resolve => {
+    mediaRecorder.onstop = () => {
+      resolve(new Blob(audioChunks, { type:"audio/wav" }));
+    };
+    mediaRecorder.stop();
+  });
+}
+
+/* ================= STATE ================= */
+let active = false;
+let totalFrames = 0;
+let eyeBadFrames = 0;
+let confidenceTimeline = [];
+
+/* ================= UI ================= */
+const startBtn = document.getElementById("start");
+const stopBtn = document.getElementById("stop");
+const overlay = document.getElementById("overlay");
+const confidenceEl = document.getElementById("confidence");
+const eyeEl = document.getElementById("eye");
+const coachTip = document.getElementById("coachTip");
+
+/* ================= BUTTONS ================= */
+startBtn.onclick = () => {
+  active = true;
+  speechText = "";
+  totalFrames = eyeBadFrames = 0;
+  confidenceTimeline = [];
+
+  startBtn.disabled = true;
+  stopBtn.disabled = false;
+
+  coachTip.textContent = "Speak calmly 🙂";
+  coachTip.className = "good";
+
+  recognition.start();
+  startAudioRecording();
+};
+
+stopBtn.onclick = async () => {
+  active = false;
+  recognition.stop();
+  overlay.style.display = "flex";
+
+  const audioBlob = await stopAudioRecording();
+
+  /* -------- EYE CONFIDENCE -------- */
+  const eyeBadPct = eyeBadFrames / Math.max(1,totalFrames);
+  let eyeScore = 100;
+  if (eyeBadPct > 0.10) eyeScore -= 10;
+  if (eyeBadPct > 0.25) eyeScore -= 20;
+  if (eyeBadPct > 0.40) eyeScore -= 35;
+
+  /* -------- VOICE CONFIDENCE -------- */
+  let voicePenalty = 0;
+
+  try{
+    const formData = new FormData();
+    formData.append("audio", audioBlob, "speech.wav");
+
+    const res = await fetch("/analyze_voice_secure",{
+      method:"POST",
+      body: formData
+    });
+    const data = await res.json();
+    voicePenalty = 100 - (data.confidence || 70);
+  }catch(e){}
+
+  /* -------- FINAL CONFIDENCE -------- */
+  const finalConfidence = Math.max(eyeScore - voicePenalty, 30);
+
+  /* ✅ DERIVE EMOTION FROM FINAL CONFIDENCE */
+  let finalEmotion = "confident";
+  if (finalConfidence < 55) finalEmotion = "fear";
+  else if (finalConfidence < 75) finalEmotion = "nervous";
+
+  /* -------- PROCESS SPEECH -------- */
+  let reportData = {
+    original: speechText || "No speech detected",
+    corrected: speechText || "No speech detected",
+    scores:{ grammar:0, fluency:0, repetition:0 }
+  };
+
+  if(speechText.trim()){
+    const res = await fetch("/process_text",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ text: speechText })
+    });
+    reportData = await res.json();
+  }
+
+  /* ✅ SAVE SESSION */
+  const saveRes = await fetch("/save_session",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      original: reportData.original,
+      corrected: reportData.corrected,
+      scores: reportData.scores,
+      confidence: finalConfidence,
+      emotion: finalEmotion,
+      timeline: confidenceTimeline
+    })
+  });
+
+  const saved = await saveRes.json();
+  window.location.href = `/report?id=${saved.session_id}`;
+};
+
+/* ================= FACE MESH ================= */
+const face = new FaceMesh({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+});
+face.setOptions({maxNumFaces:1, refineLandmarks:true});
+
+face.onResults(r => {
+  if(!active || !r.multiFaceLandmarks.length) return;
+
+  totalFrames++;
+  const f = r.multiFaceLandmarks[0];
+
+  const leftEye = Math.abs(f[159].y - f[145].y);
+  const rightEye = Math.abs(f[386].y - f[374].y);
+  const eyesOpen = (leftEye + rightEye)/2;
+
+  const noseX = f[1].x;
+  const faceCenterX = (f[234].x + f[454].x)/2;
+  const noseOffset = Math.abs(noseX - faceCenterX);
+  const noseY = f[1].y;
+
+  const goodEyeContact =
+    eyesOpen > 0.012 &&
+    noseOffset < 0.04 &&
+    noseY > 0.35 &&
+    noseY < 0.58;
+
+  let frameConfidence = 100;
+
+  if(!goodEyeContact){
+    eyeBadFrames++;
+    frameConfidence -= 15;
+    eyeEl.textContent = "Poor";
+    eyeEl.className = "bad";
+    coachTip.textContent = "Look directly at the camera 👀";
+    coachTip.className = "warn";
+  } else {
+    eyeEl.textContent = "Good";
+    eyeEl.className = "good";
+    coachTip.textContent = "Good eye contact 👍";
+    coachTip.className = "good";
+  }
+
+  frameConfidence = Math.max(frameConfidence,30);
+  confidenceTimeline.push(frameConfidence);
+
+  confidenceEl.textContent =
+    frameConfidence > 75 ? "High" :
+    frameConfidence > 55 ? "Moderate" : "Low";
+
+  confidenceEl.className =
+    frameConfidence > 75 ? "good" :
+    frameConfidence > 55 ? "warn" : "bad";
+});
+
+/* ================= CAMERA LOOP ================= */
+new Camera(cam,{
+  onFrame: async () => await face.send({image: cam}),
+  width:640,
+  height:360
+}).start();
+</script>
+
+</body>
+</html>

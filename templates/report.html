@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SpeakSmart – Session Report</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<!-- ✅ EmailJS (TEXT ONLY) -->
+<script src=""></script>
+<script>
+(function(){
+  emailjs.init(""); // ✅ YOUR PUBLIC KEY
+})();
+</script>
+
+<style>
+body{
+  margin:0;
+  font-family:Segoe UI,Arial;
+  background:#f5f3ff;
+}
+.report{
+  max-width:900px;
+  margin:30px auto;
+  background:white;
+  padding:28px;
+  border-radius:20px;
+}
+.section{margin-top:26px}
+.good{color:#16a34a}
+.warn{color:#ca8a04}
+.bad{color:#dc2626}
+.score{
+  font-size:22px;
+  font-weight:700;
+  margin-top:14px
+}
+.chart-box{
+  width:260px;
+  height:260px;
+  margin:20px auto
+}
+.insight{
+  background:#f3f4f6;
+  padding:14px;
+  border-radius:12px;
+  margin-top:12px;
+  font-style:italic;
+}
+button{
+  background:#7c3aed;
+  color:white;
+  border:none;
+  padding:10px 18px;
+  border-radius:10px;
+  cursor:pointer;
+  margin:10px 0 20px 0;
+}
+</style>
+</head>
+
+<body>
+
+{% if not session %}
+<div class="report">
+  <h2>❌ No session data found</h2>
+  <p>Please start a new practice session.</p>
+</div>
+{% else %}
+
+<div class="report" id="reportContent">
+
+<h2>📊 SpeakSmart – Session Report</h2>
+<p><b>Session Time:</b> {{ session.created_at }}</p>
+
+<button onclick="downloadPDF()">⬇ Download PDF Report</button>
+
+<div class="chart-box">
+  <canvas id="donutChart"></canvas>
+</div>
+
+<div class="section">
+  <h3>📈 Confidence Trend During Speech</h3>
+  <canvas id="confidenceChart" height="120"></canvas>
+</div>
+
+<div class="section">
+  <h3>🧠 Confidence & Delivery Analysis</h3>
+  <p id="confidenceSummary"></p>
+
+  <div class="insight" id="expertInsight"></div>
+
+  <h4>⚠ Factors That Reduced Confidence</h4>
+  <ul id="issues"></ul>
+
+  <h4>🔍 Observations</h4>
+  <ul id="observations"></ul>
+
+  <h4>🚀 Improvement Suggestions</h4>
+  <ul id="suggestions"></ul>
+
+  <div class="score">
+    Overall Performance Score:
+    <span id="overallScore"></span> / 100
+  </div>
+</div>
+
+<div class="section">
+  <h3>🗣 Original Speech</h3>
+  <p id="orig"></p>
+
+  <h3>✅ Corrected Speech</h3>
+  <p id="corr"></p>
+</div>
+
+<button onclick="sendEmail()">📧 Send Report to Email</button>
+
+</div>
+
+<script id="session-data" type="application/json">
+{{ session | tojson }}
+</script>
+
+<script>
+/* ---------- DATA ---------- */
+const session = JSON.parse(
+  document.getElementById("session-data").textContent
+);
+
+if (!session.scores) {
+  session.scores = { grammar:0, fluency:0, repetition:0 };
+}
+
+const report = {
+  original: session.original_text || "",
+  corrected: session.corrected_text || "",
+  scores: session.scores
+};
+
+const confidence = session.confidence || 0;
+const emotion = session.emotion || "confident";
+const timeline = session.timeline || [];
+
+document.getElementById("orig").textContent = report.original;
+document.getElementById("corr").textContent = report.corrected;
+
+/* ---------- CONFIDENCE LEVEL ---------- */
+let level="High Confidence", cls="good";
+if(confidence<70){level="Moderate Confidence";cls="warn";}
+if(confidence<50){level="Low Confidence";cls="bad";}
+
+document.getElementById("confidenceSummary").innerHTML =
+`Overall Confidence Level: <b class="${cls}">${level}</b>`;
+
+/* ---------- INSIGHT ---------- */
+document.getElementById("expertInsight").textContent =
+confidence>=80
+? "Your delivery reflects strong confidence and clarity."
+: confidence>=60
+? "Your confidence was good, but moments of hesitation reduced impact."
+: "Noticeable nervousness affected delivery.";
+
+/* ---------- ISSUES ---------- */
+const issues=[];
+if(emotion==="fear") issues.push("Fearful vocal tone reduced confidence.");
+if(emotion==="nervous") issues.push("Nervous voice patterns caused instability.");
+
+document.getElementById("issues").innerHTML =
+issues.length ? issues.map(i=>`<li>${i}</li>`).join("")
+: "<li class='good'>No major confidence issues detected.</li>";
+
+/* ---------- OBSERVATIONS ---------- */
+document.getElementById("observations").innerHTML=`
+<li>Voice emotion: <b>${emotion}</b></li>
+<li>Confidence score: <b>${confidence}</b></li>`;
+
+/* ---------- SUGGESTIONS ---------- */
+const tips=[];
+if(confidence<70) tips.push("Practice mock sessions regularly.");
+if(!tips.length) tips.push("Excellent delivery. Maintain this confidence.");
+
+document.getElementById("suggestions").innerHTML =
+tips.map(t=>`<li>${t}</li>`).join("");
+
+/* ---------- SCORE ---------- */
+const techAvg =
+(report.scores.grammar + report.scores.fluency + report.scores.repetition) / 3;
+
+document.getElementById("overallScore").textContent =
+Math.round(0.6 * techAvg + 0.4 * confidence);
+
+/* ---------- DONUT CHART ---------- */
+new Chart(document.getElementById("donutChart"),{
+  type:"doughnut",
+  data:{
+    labels:["Grammar","Fluency","Repetition"],
+    datasets:[{
+      data:[
+        report.scores.grammar,
+        report.scores.fluency,
+        report.scores.repetition
+      ],
+      backgroundColor:["#7c3aed","#a78bfa","#ddd6fe"]
+    }]
+  },
+  options:{cutout:"65%"}
+});
+
+/* ---------- CONFIDENCE TREND ---------- */
+if(timeline.length>1){
+  new Chart(document.getElementById("confidenceChart"),{
+    type:"line",
+    data:{
+      labels: timeline.map((_,i)=>`T${i+1}`),
+      datasets:[{
+        data: timeline,
+        borderWidth:3,
+        tension:0.4
+      }]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{y:{min:0,max:100}}
+    }
+  });
+}
+
+/* ---------- PDF ---------- */
+function downloadPDF(){
+  html2pdf().from(document.getElementById("reportContent"))
+    .save("SpeakSmart_Report.pdf");
+}
+
+/* ---------- EMAIL (TEXT ONLY, EMAILJS) ---------- */
+function sendEmail(){
+  emailjs.send(
+    "",      // 🔴 Your Service ID
+    "",     // 🔴 Your Template ID
+    {
+      to_email: session.email,
+      to_name: session.email.split("@")[0],
+      confidence: confidence,
+      emotion: emotion,
+      date: session.created_at,
+      original: report.original,
+      corrected: report.corrected
+    }
+  )
+  .then(() => {
+    alert("✅ Report summary sent to your email!");
+  })
+  .catch(err => {
+    console.error(err);
+    alert("❌ Email failed. Check console.");
+  });
+}
+</script>
+
+{% endif %}
+</body>
+</html>

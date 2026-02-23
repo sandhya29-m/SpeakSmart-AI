@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SpeakSmart Live AI 🎤</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; color: #fff; text-align: center;
+      background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%); overflow: hidden; }
+    h1 { margin-top: 50px; font-size: 3em; text-shadow: 0 0 20px #00d9ff; }
+    .mode-container { margin-top: 100px; display:flex; justify-content:center; gap:50px; }
+    .mode-card { background: rgba(20,20,40,0.9); border:1px solid #444; border-radius:15px; padding:50px 40px; width:250px; cursor:pointer; transition:0.3s; box-shadow:0 0 20px rgba(0,217,255,0.3); }
+    .mode-card:hover { transform: scale(1.05); box-shadow:0 0 40px #00d9ff; }
+    .mode-card h2 { font-size:1.8em; margin-bottom:10px; text-shadow:0 0 10px #00d9ff; }
+    .mode-card p { font-size:1em; color:#ccc; }
+  </style>
+</head>
+<body>
+  <h1>SpeakSmart Live AI 🎤</h1>
+  <div class="mode-container">
+    <div class="mode-card" onclick="location.href='/sitting'">
+      <h2>Sitting Mode</h2>
+      <p>Perfect for interviews — small live cam & continuous feedback.</p>
+    </div>
+    <div class="mode-card" onclick="location.href='/stage'">
+      <h2>Stage Mode</h2>
+      <p>For presentations — larger camera and clear scoreboard.</p>
+    </div>
+  </div>
+</body>
+</html>
