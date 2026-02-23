@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SpeakSmart – Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{
+  margin:0;
+  font-family:"Segoe UI", Arial;
+  background:#f5f3ff;
+}
+.nav{
+  background:#7c3aed;
+  color:white;
+  padding:18px 32px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.container{
+  max-width:1100px;
+  margin:30px auto;
+  padding:0 15px;
+}
+.card{
+  background:white;
+  padding:25px;
+  border-radius:22px;
+  box-shadow:0 10px 30px rgba(0,0,0,.08);
+  margin-bottom:25px;
+}
+.start-card{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.stats{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+}
+.stat{
+  background:#faf5ff;
+  padding:20px;
+  border-radius:18px;
+  text-align:center;
+  font-size:18px;
+}
+.stat b{
+  font-size:26px;
+  display:block;
+  margin-top:6px;
+  color:#7c3aed;
+}
+button{
+  padding:14px 26px;
+  background:#7c3aed;
+  border:none;
+  color:white;
+  border-radius:14px;
+  cursor:pointer;
+  font-size:16px;
+}
+button:hover{background:#6d28d9}
+.session{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:14px 0;
+  border-bottom:1px solid #eee;
+  cursor:pointer;
+}
+.session:hover{background:#faf5ff}
+.badge{
+  padding:6px 12px;
+  border-radius:14px;
+  font-size:13px;
+  color:white;
+}
+.confident{background:#16a34a}
+.nervous{background:#ca8a04}
+.fear{background:#dc2626}
+.empty{
+  text-align:center;
+  padding:40px;
+  color:#777;
+}
+canvas{max-height:260px}
+</style>
+</head>
+
+<body>
+
+<div class="nav">
+  <b>SpeakSmart AI</b>
+  <button onclick="location.href='/logout'">Logout</button>
+</div>
+
+<div class="container">
+
+<div class="card start-card">
+  <div>
+    <h2>🎤 Start Practicing</h2>
+    <p>Improve confidence, clarity & posture with AI feedback</p>
+  </div>
+  <button onclick="location.href='/sitting'">Start Speaking</button>
+</div>
+
+<div class="card stats">
+  <div class="stat">
+    🔥 Confidence Improvement
+    <b id="improvement">0%</b>
+  </div>
+  <div class="stat">
+    🗓 Weekly Average
+    <b id="weeklyAvg">0</b>
+  </div>
+</div>
+
+<div class="card">
+  <h3>📈 Weekly Confidence Trend</h3>
+  <canvas id="progressChart"></canvas>
+  <p id="journeyText"></p>
+</div>
+
+<div class="card">
+  <button onclick="sendLatestReport()">📧 Email Latest Report</button>
+</div>
+
+<div class="card">
+  <h3>🕒 Practice History</h3>
+  <div id="sessionList"></div>
+</div>
+
+</div>
+
+<script>
+fetch("/get_sessions")
+.then(res => res.json())
+.then(data => {
+
+  const sessions = data.sessions || [];
+  const list = document.getElementById("sessionList");
+  const journey = document.getElementById("journeyText");
+
+  document.getElementById("improvement").textContent =
+    (data.improvement || 0) + "%";
+
+  document.getElementById("weeklyAvg").textContent =
+    data.weekly_avg || 0;
+
+  if(sessions.length === 0){
+    journey.innerHTML = "🌱 Start your first session to see progress.";
+    list.innerHTML = `<div class="empty">No sessions yet 🚀</div>`;
+    return;
+  }
+
+  journey.innerHTML = `You’ve completed <b>${sessions.length}</b> sessions 💪`;
+
+  const last7 = sessions.slice(0,7).reverse();
+  const labels = last7.map(s => s.created_at.split(" ")[0]);
+  const confidence = last7.map(s => s.confidence);
+
+  new Chart(document.getElementById("progressChart"), {
+    type:"line",
+    data:{
+      labels,
+      datasets:[{
+        data:confidence,
+        borderWidth:3,
+        tension:.4,
+        fill:false
+      }]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{y:{min:0,max:100}}
+    }
+  });
+
+  list.innerHTML="";
+  sessions.forEach(s=>{
+    const div=document.createElement("div");
+    div.className="session";
+    div.onclick=()=>location.href=`/report?id=${s.id}`;
+
+    const emotionClass =
+      s.emotion === "fear" ? "fear" :
+      s.emotion === "nervous" ? "nervous" :
+      "confident";
+
+    div.innerHTML = `
+      <div>
+        <b>${s.created_at}</b><br>
+        Confidence: ${s.confidence}%
+      </div>
+      <span class="badge ${emotionClass}">
+        ${emotionClass}
+      </span>
+    `;
+
+    list.appendChild(div);
+  });
+});
+
+function sendLatestReport(){
+  fetch("/get_sessions")
+  .then(res=>res.json())
+  .then(data=>{
+    if(!data.sessions.length) return alert("No session found");
+    fetch("/send_report_email",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ session_id: data.sessions[0].id })
+    }).then(()=>alert("📧 Report emailed successfully"));
+  });
+}
+</script>
+
+</body>
+</html>
