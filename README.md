@@ -1,5 +1,26 @@
 # deepface
+# 🎤 SpeakSmart AI
 
+AI-powered public speaking assistant with real-time feedback.
+
+## 🚀 Features
+- Speech-to-text
+- Grammar correction
+- Eye contact detection
+- Gesture analysis
+- Emotion detection
+- Confidence scoring
+
+## 🛠 Tech Stack
+- Python (Flask)
+- MediaPipe
+- OpenCV
+- Librosa
+- Transformers
+- HTML, CSS, JavaScript
+
+## 📌 Note
+API keys and model files are removed for security reasons.
 <div align="center">
 
 [![Downloads](https://static.pepy.tech/personalized-badge/deepface?period=total&units=international_system&left_color=grey&right_color=blue&left_text=downloads)](https://pepy.tech/project/deepface)
